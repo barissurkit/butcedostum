@@ -44,4 +44,8 @@ yarn-error.log*
 
 # local database
 dev.db
+dev.db-shm
+dev.db-wal
 *.db
+*.db-shm
+*.db-wal
