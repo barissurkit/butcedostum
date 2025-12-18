@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Transaction } from "@/types/transaction";
 
 import DashboardHeader from "@/components/dashboard/DashboardHeader";
@@ -10,132 +10,130 @@ import TransactionsSection from "@/components/dashboard/TransactionsSection";
 
 export default function DashboardPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [filter, setFilter] = useState<"all" | "income" | "expense">("all");
+  const [loading, setLoading] = useState(true);
 
-  const [editingId, setEditingId] = useState<string | null>(null);
+  async function loadTransactions() {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/transactions", { cache: "no-store" });
+      const data = await res.json();
+      setTransactions(data.transactions ?? []);
+    } finally {
+      setLoading(false);
+    }
+  }
 
-  // Sayfa açılınca backend'den işlemleri çek
   useEffect(() => {
-    fetch("/api/transactions")
-      .then((res) => res.json())
-      .then((data) => {
-        setTransactions(data.transactions);
-      });
+    loadTransactions();
   }, []);
 
-  // Düzenlenen işlem (id üzerinden seçiyoruz)
-  const editingTransaction =
-    editingId === null ? null : transactions.find((t) => t.id === editingId) ?? null;
+  useEffect(() => {
+    document.title = "BütçeDostum | Dashboard";
+  }, []);
 
-  // Filtreye göre ekranda gösterilecek liste
-  const visibleTransactions =
-    filter === "all" ? transactions : transactions.filter((t) => t.type === filter);
+  const summary = useMemo(() => {
+    const income = transactions.filter(t => t.type === "income").reduce((acc, t) => acc + t.amount, 0);
+    const expense = transactions.filter(t => t.type === "expense").reduce((acc, t) => acc + t.amount, 0);
+    return { income, expense, balance: income - expense };
+  }, [transactions]);
 
-  // ✅ EKLEME: POST /api/transactions
-  async function handleAdd(tx: Transaction) {
+  async function handleCreate(payload: {
+    title: string;
+    amount: number;
+    type: "income" | "expense";
+    date: string;
+    category?: string | null;
+  }) {
     const res = await fetch("/api/transactions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        title: tx.title,
-        type: tx.type,
-        amount: tx.amount,
-        date: tx.date,
-      }),
+      body: JSON.stringify(payload),
     });
 
+    const data = await res.json().catch(() => ({}));
+
     if (!res.ok) {
-      const err = await res.json().catch(() => null);
-      alert(err?.error ?? "İşlem eklenemedi.");
+      alert(data?.error ?? "Bir hata oluştu");
       return;
     }
 
-    const data = await res.json();
-    const created: Transaction = data.transaction;
+    const created: Transaction = {
+      ...data.transaction,
+      createdAt: String(data.transaction.createdAt),
+    };
 
-    setTransactions((prev) => [created, ...prev]);
+    setTransactions(prev => [created, ...prev]);
   }
 
-  // ✅ SİLME: DELETE /api/transactions?id=...
-  async function handleDelete(id: string) {
-    const res = await fetch(`/api/transactions?id=${encodeURIComponent(id)}`, {
-      method: "DELETE",
-    });
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => null);
-      alert(err?.error ?? "Silme işlemi başarısız.");
-      return;
-    }
-
-    setTransactions((prev) => prev.filter((t) => t.id !== id));
-
-    // Silinen işlem düzenleniyorsa edit modundan çık
-    setEditingId((prev) => (prev === id ? null : prev));
-  }
-
-  // ✅ GÜNCELLEME: PATCH /api/transactions?id=...
-  async function handleUpdate(updated: Transaction) {
-    const res = await fetch(`/api/transactions?id=${encodeURIComponent(updated.id)}`, {
+  async function handleUpdate(
+    id: string,
+    patch: Partial<Pick<Transaction, "title" | "amount" | "type" | "date" | "category">>
+  ) {
+    const res = await fetch("/api/transactions", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        title: updated.title,
-        type: updated.type,
-        amount: updated.amount,
-        date: updated.date,
-      }),
+      body: JSON.stringify({ id, ...patch }),
     });
 
+    const data = await res.json().catch(() => ({}));
+
     if (!res.ok) {
-      const err = await res.json().catch(() => null);
-      alert(err?.error ?? "Güncelleme başarısız.");
+      alert(data?.error ?? "Güncelleme hatası");
       return;
     }
 
-    const data = await res.json();
-    const saved: Transaction = data.transaction;
+    const updated: Transaction = {
+      ...data.transaction,
+      createdAt: String(data.transaction.createdAt),
+    };
 
-    setTransactions((prev) => prev.map((t) => (t.id === saved.id ? saved : t)));
-    setEditingId(null);
+    setTransactions(prev => prev.map(t => (t.id === id ? updated : t)));
+  }
+
+  async function handleDelete(id: string) {
+    const res = await fetch("/api/transactions", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      alert(data?.error ?? "Silme hatası");
+      return;
+    }
+
+    setTransactions(prev => prev.filter(t => t.id !== id));
   }
 
   return (
     <main>
       <DashboardHeader />
 
-      <section>
-        <h2>Filtre</h2>
+      <div className="grid grid-2" style={{ marginTop: 16 }}>
+        <div style={{ display: "grid", gap: 16 }}>
+          <AddTransactionForm onCreate={handleCreate} />
+        </div>
 
-        <label>
-          <span>Tür</span>
-          <select
-            value={filter}
-            onChange={(e) =>
-              setFilter(e.target.value as "all" | "income" | "expense")
-            }
-          >
-            <option value="all">Hepsi</option>
-            <option value="income">Gelir</option>
-            <option value="expense">Gider</option>
-          </select>
-        </label>
-      </section>
+        <div style={{ display: "grid", gap: 16 }}>
+          <SummarySection
+            income={summary.income}
+            expense={summary.expense}
+            balance={summary.balance}
+            loading={loading}
+          />
+        </div>
+      </div>
 
-      <AddTransactionForm
-        onAdd={handleAdd}
-        onUpdate={handleUpdate}
-        editingTransaction={editingTransaction}
-        onCancelEdit={() => setEditingId(null)}
-      />
-
-      <SummarySection transactions={visibleTransactions} />
-
-      <TransactionsSection
-        transactions={visibleTransactions}
-        onDelete={handleDelete}
-        onEdit={(id) => setEditingId(id)}
-      />
+      <div style={{ marginTop: 16 }}>
+        <TransactionsSection
+          transactions={transactions}
+          loading={loading}
+          onUpdate={handleUpdate}
+          onDelete={handleDelete}
+        />
+      </div>
     </main>
   );
 }

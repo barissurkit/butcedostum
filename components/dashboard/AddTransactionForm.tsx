@@ -1,139 +1,150 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { Transaction, TransactionType } from "@/types/transaction";
+import { getCategoriesByType, type Category } from "@/lib/categories";
 
 type Props = {
-  onAdd: (tx: Transaction) => void;
-  onUpdate: (tx: Transaction) => void;
-  editingTransaction: Transaction | null;
-  onCancelEdit: () => void;
+  onCreate: (payload: {
+    title: string;
+    amount: number;
+    type: "income" | "expense";
+    date: string;
+    category: Category | null;
+  }) => Promise<void> | void;
 };
 
-function todayISO() {
-  const now = new Date();
-  const yyyy = now.getFullYear();
-  const mm = String(now.getMonth() + 1).padStart(2, "0");
-  const dd = String(now.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
-}
-
-export default function AddTransactionForm({
-  onAdd,
-  onUpdate,
-  editingTransaction,
-  onCancelEdit,
-}: Props) {
+export default function AddTransactionForm({ onCreate }: Props) {
   const [title, setTitle] = useState("");
-  const [type, setType] = useState<TransactionType>("expense");
-  const [amountText, setAmountText] = useState("");
-  const [date, setDate] = useState(todayISO());
+  const [amount, setAmount] = useState(""); // 👈 string
+  const [type, setType] = useState<"income" | "expense">("expense");
+  const [category, setCategory] = useState<Category | "">("");
+
+  const [date, setDate] = useState<string>(() => {
+    const d = new Date();
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  });
+
+  const [saving, setSaving] = useState(false);
+
+  const categoryOptions = getCategoriesByType(type);
 
   useEffect(() => {
-    if (!editingTransaction) {
-      setTitle("");
-      setType("expense");
-      setAmountText("");
-      setDate(todayISO());
-      return;
-    }
+    setCategory("");
+  }, [type]);
 
-    setTitle(editingTransaction.title);
-    setType(editingTransaction.type);
-    setAmountText(String(editingTransaction.amount));
-    setDate(editingTransaction.date);
-  }, [editingTransaction]);
-
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
 
-    const trimmedTitle = title.trim();
-    if (!trimmedTitle) {
-      alert("Başlık boş olamaz.");
+    const cleanTitle = title.trim();
+    const numericAmount = Number(amount);
+
+    if (!cleanTitle) {
+      alert("Başlık zorunlu");
+      return;
+    }
+    if (!Number.isFinite(numericAmount) || numericAmount === 0) {
+      alert("Tutar 0'dan büyük olmalı");
+      return;
+    }
+    if (!date) {
+      alert("Tarih zorunlu");
+      return;
+    }
+    if (!category) {
+      alert("Kategori seçmelisin");
       return;
     }
 
-    const amount = Number(amountText);
-    if (!Number.isFinite(amount) || amount <= 0) {
-      alert("Tutar 0'dan büyük bir sayı olmalı.");
-      return;
-    }
-
-    if (editingTransaction) {
-      const updated: Transaction = {
-        ...editingTransaction,
-        title: trimmedTitle,
+    setSaving(true);
+    try {
+      await onCreate({
+        title: cleanTitle,
+        amount: numericAmount,
         type,
-        amount,
         date,
-      };
+        category,
+      });
 
-      onUpdate(updated);
-      return;
+      // reset
+      setTitle("");
+      setAmount("");
+      setType("expense");
+      setCategory("");
+    } finally {
+      setSaving(false);
     }
-
-    const created: Transaction = {
-      id: `t_${Date.now()}`,
-      title: trimmedTitle,
-      type,
-      amount,
-      date,
-    };
-
-    onAdd(created);
   }
 
-  const isEditing = editingTransaction !== null;
-
   return (
-    <section>
-      <h2>{isEditing ? "İşlemi Düzenle" : "İşlem Ekle"}</h2>
+    <div className="card">
+      <h2 className="h2">Yeni işlem ekle</h2>
 
-      <form onSubmit={handleSubmit}>
-        <label>
-          <span>Başlık</span>
+      <form onSubmit={submit} className="row" style={{ alignItems: "flex-end" }}>
+        <div className="col">
+          <label className="muted">Başlık</label>
           <input
-            name="title"
             value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Örn: Market"
-            required
+            onChange={e => setTitle(e.target.value)}
+            placeholder={type === "income" ? "Örn: Maaş" : "Örn: Market"}
           />
-        </label>
+        </div>
 
-        <label>
-          <span>Tür</span>
-          <select value={type} onChange={(e) => setType(e.target.value as TransactionType)}>
-            <option value="expense">Gider</option>
-            <option value="income">Gelir</option>
-          </select>
-        </label>
-
-        <label>
-          <span>Tutar (₺)</span>
+        <div className="col">
+          <label className="muted">Tutar</label>
           <input
-            name="amount"
-            value={amountText}
-            onChange={(e) => setAmountText(e.target.value)}
-            placeholder="Örn: 250"
-            inputMode="numeric"
-            required
+            type="number"
+            value={amount}
+            onChange={e => setAmount(e.target.value)}
+            placeholder="₺"
+            min={0}
           />
-        </label>
+        </div>
 
-        <label>
-          <span>Tarih</span>
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
-        </label>
+        <div className="col">
+          <label className="muted">Tür</label>
+          <select value={type} onChange={e => setType(e.target.value as any)}>
+            <option value="income">Gelir</option>
+            <option value="expense">Gider</option>
+          </select>
+        </div>
 
-        <button type="submit">{isEditing ? "Kaydet" : "Ekle"}</button>
+        <div className="col">
+          <label className="muted">Kategori</label>
+          <select
+            value={category}
+            onChange={e => setCategory(e.target.value as Category | "")}
+          >
+            <option value="">Kategori seç</option>
+            {categoryOptions.map(c => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        </div>
 
-        {isEditing ? (
-          <button type="button" onClick={onCancelEdit}>
-            İptal
+        <div className="col">
+          <label className="muted">Tarih</label>
+          <input
+            type="date"
+            value={date}
+            onChange={e => setDate(e.target.value)}
+          />
+        </div>
+
+        <div className="col" style={{ minWidth: 160 }}>
+          <button
+            type="submit"
+            disabled={saving || !title || !amount || !category}
+            style={{ width: "100%" }}
+          >
+            {saving ? "Ekleniyor..." : "Ekle"}
           </button>
-        ) : null}
+        </div>
       </form>
-    </section>
+    </div>
   );
 }

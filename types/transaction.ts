@@ -1,9 +1,11 @@
-export type TransactionType = "income" | "expense";
-
-export type Transaction = {
-  id: string;
+//buaradaki amacım: transaction verisi UI içinde dolaşırken hatasız olsun.
+ 
+export type Transaction = { //transaction adında bir Typescript tanımladım.
+  id: string; // her kaydın benzersiz kimliği
   title: string;
-  type: TransactionType;
   amount: number;
+  type: "income" | "expense";
   date: string;
+  category: string | null;
+  createdAt: string; // kaydın oluşturulma zamanı için.
 };

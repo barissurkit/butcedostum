@@ -1,51 +1,118 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation"; //Next.js App Router’da yönlendirme için kullanılan hook.
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+
+function isValidEmail(email: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
 
 export default function LoginPage() {
+  const router = useRouter();
 
-    const router = useRouter(); //Router objesini alıyoruz. // bu obje ile şu sayfaya git diyebiliyoruz.
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
 
-    function handleSubmit(e:React.FormEvent<HTMLFormElement>) {
-        e.preventDefault();
-        // Şimdilik sadece UI var. Backend ekleyince burada giriş isteği atacağız.
-        router.push("/dashboard"); //Sayfa yenilenmeden /dashboard route’una geçer. //push demek: tarayıcı geçmişine ekle
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    document.title = "BütçeDostum | Giriş";
+  }, []);
+
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setError(null);
+
+    const cleanEmail = email.trim().toLowerCase();
+
+    if (!cleanEmail) return setError("E-posta boş olamaz.");
+    if (!isValidEmail(cleanEmail)) return setError("E-posta formatı hatalı.");
+    if (!password) return setError("Şifre boş olamaz.");
+
+    setLoading(true);
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: cleanEmail, password }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        setError(data.error || "Giriş başarısız. Bilgilerini kontrol et.");
+        return;
+      }
+
+      router.push("/dashboard");
+      router.refresh();
+    } catch {
+      setError("Sunucuya bağlanılamadı. İnternetini kontrol et.");
+    } finally {
+      setLoading(false);
     }
+  }
 
-    return(
-        <main>
-            <h1>Giriş Yap</h1>
+  return (
+    <main className="auth-shell">
+      <h1 className="h1">Giriş Yap</h1>
+      <p className="muted">Hesabına giriş yapıp işlemlerini yönetebilirsin.</p>
 
-            <form onSubmit={handleSubmit}>
-                <label >
-                    <span>E-posta</span>
-                    <input
-                        type="email" 
-                        name="E-posta"
-                        placeholder="ornek@gmail.com"
-                        autoComplete="email"
-                        required
-                        />
-                </label>
+      <div className="card auth-card">
+        <form onSubmit={handleSubmit} style={{ display: "grid", gap: 12 }}>
+          <label>
+            <span>E-posta</span>
+            <input
+              type="email"
+              name="email"
+              placeholder="ornek@gmail.com"
+              autoComplete="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              disabled={loading}
+              required
+            />
+          </label>
 
-                <label>
-                    <span>Şifre</span>
-                    <input
-                        type="password" 
-                        name="password"
-                        placeholder="*****"
-                        autoComplete="current-password"
-                        required
-                    />
-                </label>
+          <label>
+            <span>Şifre</span>
+            <input
+              type="password"
+              name="password"
+              placeholder="••••••••"
+              autoComplete="current-password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              disabled={loading}
+              required
+            />
+          </label>
 
-                <button type="submit">Giriş Yap</button>
-            </form>
+          {error && (
+            <div
+              className="card"
+              style={{
+                borderColor: "rgba(220, 38, 38, .35)",
+                background: "rgba(220, 38, 38, .06)",
+                boxShadow: "none",
+                padding: 12,
+              }}
+            >
+              <p style={{ margin: 0, color: "crimson", fontSize: 14 }}>{error}</p>
+            </div>
+          )}
 
-            <p>
-                Hesabın yok mu? <Link href="/register">Kayıt Ol</Link>
-            </p>
-        </main>
-    );
+          <button type="submit" disabled={loading} style={{ marginTop: 4 }}>
+            {loading ? "Giriş yapılıyor..." : "Giriş Yap"}
+          </button>
+        </form>
+      </div>
+
+      <p className="muted" style={{ marginTop: 12 }}>
+        Hesabın yok mu? <Link href="/register">Kayıt Ol</Link>
+      </p>
+    </main>
+  );
 }

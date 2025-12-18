@@ -1,11 +1,29 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
-  provider = "prisma-client"
-  output   = "../lib/generated/prisma"
+  provider = "prisma-client-js"
+  output   = "../lib/generated/prisma/client"
 }
 
 datasource db {
   provider = "sqlite"
+}
+
+model Transaction {
+  id        String   @id @default(cuid())
+  title     String
+  amount    Int
+  type      String   // "income" | "expense"
+  date      String?
+  category  String?
+  createdAt DateTime @default(now())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+
+  transactions Transaction[]
 }
