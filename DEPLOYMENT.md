@@ -1,31 +1,49 @@
 # Deployment Guide
 
-## Setting up Neon Database
+## Setting up Turso Database
 
-1. Go to [Neon Console](https://console.neon.tech) and sign up/login
+1. Install Turso CLI:
+   ```bash
+   # Windows (PowerShell)
+   irm get.tur.so/install.ps1 | iex
 
-2. Create a new project:
-   - Click "Create Project"
-   - Give it a name (e.g., "butcedostum")
-   - Select your preferred region
-   - PostgreSQL version (use default)
+   # macOS/Linux
+   curl -sSfL https://get.tur.so/install.sh | bash
+   ```
 
-3. Copy your connection string:
-   - After creating the project, you'll see a connection string
-   - It looks like: `postgresql://user:password@ep-xxx.region.aws.neon.tech/dbname?sslmode=require`
-   - Copy this - you'll need it for both local development and Vercel
+2. Login to Turso:
+   ```bash
+   turso auth login
+   ```
 
-4. Update your local `.env` file:
+3. Create your database:
+   ```bash
+   turso db create butcedostum
+   ```
+
+4. Get your database URL:
+   ```bash
+   turso db show butcedostum --url
+   ```
+
+5. Create an auth token:
+   ```bash
+   turso db tokens create butcedostum
+   ```
+
+6. Update your local `.env` file:
    ```env
-   DATABASE_URL="postgresql://user:password@ep-xxx.region.aws.neon.tech/dbname?sslmode=require"
+   DATABASE_URL="libsql://your-database.turso.io"
+   TURSO_AUTH_TOKEN="your-auth-token"
    JWT_SECRET="your-generated-secret"
    ```
 
-5. Run migrations:
+7. Push your schema to Turso:
    ```bash
-   npm run prisma:migrate
+   # For Turso, you'll need to use Prisma migrations or generate SQL
+   npm run prisma:generate
+   npx prisma migrate dev --name init
    ```
-   - This will create your database tables on Neon
 
 ## Setting up Vercel
 
@@ -42,8 +60,9 @@
    - Go to your project settings
    - Navigate to "Environment Variables"
    - Add the following:
-     - `DATABASE_URL` - Your Neon connection string (same one from your `.env`)
-     - `JWT_SECRET` - A random secret string for JWT signing (generate with: `openssl rand -base64 32`)
+     - `DATABASE_URL` - Your Turso database URL (from step 4 above)
+     - `TURSO_AUTH_TOKEN` - Your Turso auth token (from step 5 above)
+     - `JWT_SECRET` - A random secret string for JWT signing
 
 5. Deploy:
    ```bash
@@ -56,17 +75,15 @@
 
 ## Local Development
 
-### Option 1: Use Neon for Local Development (Recommended)
-
 1. Copy `.env.example` to `.env`:
    ```bash
    cp .env.example .env
    ```
 
-2. Use your Neon connection string:
+2. For local development, you can use SQLite:
    ```env
-   DATABASE_URL="postgresql://user:password@ep-xxx.region.aws.neon.tech/dbname?sslmode=require"
-   JWT_SECRET="your-generated-secret"
+   DATABASE_URL="file:./dev.db"
+   JWT_SECRET="your-local-secret"
    ```
 
 3. Install dependencies:
@@ -74,38 +91,25 @@
    npm install
    ```
 
-4. Run migrations:
+4. Generate Prisma client:
+   ```bash
+   npm run prisma:generate
+   ```
+
+5. Run migrations:
    ```bash
    npm run prisma:migrate
    ```
 
-5. Start development server:
+6. Start development server:
    ```bash
    npm run dev
    ```
 
-### Option 2: Use Local PostgreSQL
-
-1. Install PostgreSQL locally
-
-2. Create a local database:
-   ```bash
-   createdb butcedostum
-   ```
-
-3. Update `.env`:
-   ```env
-   DATABASE_URL="postgresql://localhost:5432/butcedostum?schema=public"
-   JWT_SECRET="your-local-secret"
-   ```
-
-4. Follow steps 3-5 from Option 1
-
 ## Important Notes
 
 - The `postinstall` script automatically generates Prisma client after `npm install`
-- Neon has a generous free tier perfect for development and small projects
-- You can use the same Neon database for both local dev and production, or create separate databases
+- For production (Turso), use the `libsql://` URL format
+- For local development, use `file:./dev.db` format
 - Never commit your `.env` file (it's already in `.gitignore`)
 - The Prisma client is generated to `lib/generated/prisma/client` (also gitignored)
-- Neon automatically handles connection pooling and scaling
