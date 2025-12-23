@@ -6,6 +6,7 @@ export default function HomePage() {
         <p className="muted">Gelir-gider takibiniz kısacası "Bütçeniz" için bir dost.</p>
         <a href="/login">Giriş Yap</a>
         <br /> <hr />
+        <a href="/register">Kayıt Ol</a>
       </div>
     </main>
   );
